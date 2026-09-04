@@ -1,0 +1,807 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+<title>马里奥跳跳 · 水豚积木大冒险</title>
+<style>
+  :root{
+    --ui:#ffffff;
+    --shadow:rgba(0,0,0,.18);
+  }
+  html,body{
+    margin:0;
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    background:#8fd3ff;
+    font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    touch-action:none;
+  }
+  #wrap{
+    position:fixed;
+    inset:0;
+    display:flex;
+    flex-direction:column;
+    background:linear-gradient(#8fd3ff 0 62%, #dff7ff 62% 100%);
+  }
+  #topbar{
+    position:absolute;
+    z-index:5;
+    top:max(10px,env(safe-area-inset-top));
+    left:10px;
+    right:10px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    pointer-events:none;
+    color:#17324d;
+    font-weight:800;
+    text-shadow:0 2px 0 rgba(255,255,255,.75);
+  }
+  #stats{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    background:rgba(255,255,255,.76);
+    border-radius:16px;
+    padding:8px 12px;
+    box-shadow:0 3px 10px var(--shadow);
+  }
+  #tip{
+    background:rgba(255,255,255,.76);
+    border-radius:16px;
+    padding:8px 12px;
+    box-shadow:0 3px 10px var(--shadow);
+    max-width:44vw;
+    text-align:right;
+  }
+  canvas{
+    width:100%;
+    height:100%;
+    display:block;
+  }
+  #controls{
+    position:absolute;
+    z-index:7;
+    left:0; right:0;
+    bottom:max(14px,env(safe-area-inset-bottom));
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    padding:0 18px;
+    pointer-events:none;
+  }
+  .cluster{display:flex;gap:12px;pointer-events:auto}
+  .btn{
+    width:74px;
+    height:74px;
+    border:none;
+    border-radius:22px;
+    background:rgba(255,255,255,.86);
+    box-shadow:0 6px 0 rgba(0,0,0,.15),0 8px 18px rgba(0,0,0,.18);
+    font-size:34px;
+    font-weight:900;
+    color:#24445f;
+    -webkit-tap-highlight-color:transparent;
+    user-select:none;
+  }
+  .btn:active,.btn.down{
+    transform:translateY(5px);
+    box-shadow:0 1px 0 rgba(0,0,0,.18),0 4px 10px rgba(0,0,0,.14);
+  }
+  #jump{width:92px;height:92px;border-radius:28px;font-size:27px}
+  #overlay{
+    position:absolute;
+    z-index:10;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:rgba(29,56,79,.28);
+    padding:24px;
+  }
+  #card{
+    max-width:620px;
+    width:min(92vw,620px);
+    background:rgba(255,255,255,.95);
+    border-radius:28px;
+    box-shadow:0 18px 50px rgba(0,0,0,.25);
+    padding:26px;
+    text-align:center;
+    color:#17324d;
+  }
+  #card h1{margin:0 0 10px;font-size:clamp(28px,6vw,48px)}
+  #card p{font-size:18px;line-height:1.55;margin:10px 0}
+  #card .small{font-size:14px;opacity:.78}
+  #startBtn{
+    margin-top:12px;
+    padding:14px 24px;
+    border:none;
+    border-radius:18px;
+    background:#ffd45b;
+    color:#573d00;
+    font-weight:900;
+    font-size:20px;
+    box-shadow:0 5px 0 #d2a735;
+  }
+  #startBtn:active{transform:translateY(4px);box-shadow:0 1px 0 #d2a735}
+  @media (min-width:900px){
+    .btn{width:66px;height:66px}
+    #jump{width:80px;height:80px}
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="topbar">
+    <div id="stats">
+      <span id="coinText">🪙 0 / 20</span>
+      <span id="sizeText">🐹 小水豚</span>
+      <span id="turtleText">🐢 0</span>
+    </div>
+    <div id="tip">向右出发，救出公主！</div>
+  </div>
+
+  <canvas id="game" width="1280" height="720"></canvas>
+
+  <div id="controls">
+    <div class="cluster">
+      <button class="btn" id="left" aria-label="向左">◀</button>
+      <button class="btn" id="right" aria-label="向右">▶</button>
+    </div>
+    <div class="cluster">
+      <button class="btn" id="jump" aria-label="跳跃">跳！</button>
+    </div>
+  </div>
+
+  <div id="overlay">
+    <div id="card">
+      <h1>🐹 马里奥跳跳</h1>
+      <p><b>胖胖水豚的积木大冒险</b></p>
+      <p>收集金币、吃蘑菇变大、踩乌龟、踢龟壳，躲开大炮发射的炮弹，最后冲进城堡救出公主。</p>
+      <p class="small">电脑：← → 移动，空格 / ↑ 跳跃。<br>iPad / 手机：使用屏幕下方三个大按钮。</p>
+      <button id="startBtn">开始冒险</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+const card = document.getElementById('card');
+const startBtn = document.getElementById('startBtn');
+const coinText = document.getElementById('coinText');
+const sizeText = document.getElementById('sizeText');
+const turtleText = document.getElementById('turtleText');
+const tip = document.getElementById('tip');
+
+const W = 1280, H = 720;
+const GROUND_Y = 600;
+const WORLD_W = 5200;
+const GRAVITY = 1900;
+
+let running = false;
+let won = false;
+let last = 0;
+let cameraX = 0;
+let shake = 0;
+let messageTimer = 0;
+
+const keys = {left:false,right:false,jump:false};
+let jumpPressed = false;
+
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+function rects(a,b){
+  return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
+}
+function centerX(o){return o.x+o.w/2}
+function showMessage(text, seconds=2){
+  tip.textContent = text;
+  messageTimer = seconds;
+}
+function resize(){
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const r = canvas.getBoundingClientRect();
+  canvas.width = Math.round(r.width*dpr);
+  canvas.height = Math.round(r.height*dpr);
+  ctx.setTransform(canvas.width/W,0,0,canvas.height/H,0,0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+const player = {
+  x:90,y:GROUND_Y-58,w:66,h:58,
+  vx:0,vy:0,onGround:false,
+  big:false, inv:0, checkpointX:90,
+  coins:0, turtles:0,
+  facing:1
+};
+
+const platforms = [
+  {x:0,y:GROUND_Y,w:760,h:120},
+  {x:850,y:GROUND_Y,w:640,h:120},
+  {x:1570,y:GROUND_Y,w:550,h:120},
+  {x:2210,y:GROUND_Y,w:650,h:120},
+  {x:2980,y:GROUND_Y,w:760,h:120},
+  {x:3830,y:GROUND_Y,w:1370,h:120},
+  {x:470,y:505,w:150,h:30},
+  {x:1010,y:490,w:170,h:30},
+  {x:1280,y:430,w:140,h:30},
+  {x:1700,y:500,w:140,h:30},
+  {x:1920,y:440,w:150,h:30},
+  {x:2380,y:505,w:170,h:30},
+  {x:2670,y:445,w:160,h:30},
+  {x:3130,y:505,w:170,h:30},
+  {x:3400,y:445,w:170,h:30},
+  {x:4020,y:500,w:140,h:30},
+  {x:4270,y:430,w:150,h:30}
+];
+
+const coins = [];
+[
+ [260,520],[340,520],[500,450],[565,450],
+ [900,520],[1030,430],[1110,430],[1305,370],[1375,370],
+ [1610,520],[1730,440],[1945,380],[2020,380],
+ [2300,520],[2410,445],[2490,445],[2715,385],
+ [3030,520],[3160,445],[3445,385],[3520,385],
+ [3890,520],[4050,440],[4310,370],[4400,520]
+].forEach((p,i)=>coins.push({x:p[0],y:p[1],r:14,taken:false,bob:i*.7}));
+
+const mushrooms = [
+ {x:680,y:GROUND_Y-34,w:36,h:34,taken:false},
+ {x:2885,y:GROUND_Y-34,w:36,h:34,taken:false}
+];
+
+const checkpoints = [
+ {x:1530, active:false},
+ {x:2940, active:false},
+ {x:3790, active:false}
+];
+
+const turtles = [
+ {x:1180,y:GROUND_Y-42,w:46,h:42,vx:-55,state:'walk',alive:true},
+ {x:1830,y:GROUND_Y-42,w:46,h:42,vx:60,state:'walk',alive:true},
+ {x:2530,y:GROUND_Y-42,w:46,h:42,vx:-55,state:'walk',alive:true},
+ {x:3260,y:GROUND_Y-42,w:46,h:42,vx:60,state:'walk',alive:true},
+ {x:4100,y:GROUND_Y-42,w:46,h:42,vx:-55,state:'walk',alive:true}
+];
+
+const cannons = [
+ {x:2150,y:GROUND_Y-88,w:58,h:88,dir:-1,t:0.4,rate:2.2},
+ {x:2890,y:GROUND_Y-88,w:58,h:88,dir:1,t:1.0,rate:2.0},
+ {x:3650,y:GROUND_Y-88,w:58,h:88,dir:-1,t:0.2,rate:1.65},
+ {x:4470,y:GROUND_Y-88,w:58,h:88,dir:-1,t:1.0,rate:1.45}
+];
+
+let bullets = [];
+
+const princess = {x:4955,y:GROUND_Y-78,w:48,h:78};
+const castle = {x:4780,y:GROUND_Y-250,w:330,h:250};
+
+function resetGame(){
+  player.x=90; player.y=GROUND_Y-58; player.w=66; player.h=58;
+  player.vx=0; player.vy=0; player.onGround=false; player.big=false; player.inv=0;
+  player.checkpointX=90; player.coins=0; player.turtles=0; player.facing=1;
+  coins.forEach(c=>c.taken=false);
+  mushrooms.forEach(m=>m.taken=false);
+  checkpoints.forEach(c=>c.active=false);
+  turtles.forEach((t,i)=>{
+    const init=[1180,1830,2530,3260,4100][i];
+    t.x=init; t.y=GROUND_Y-42; t.vx=i%2?60:-55; t.state='walk'; t.alive=true;
+  });
+  cannons.forEach((c,i)=>c.t=[0.4,1.0,0.2,1.0][i]);
+  bullets=[];
+  cameraX=0; won=false;
+  coinText.textContent='🪙 0 / 20';
+  sizeText.textContent='🐹 小水豚';
+  turtleText.textContent='🐢 0';
+  showMessage('向右出发，救出公主！',3);
+}
+
+function bindButton(id, key, isJump=false){
+  const el=document.getElementById(id);
+
+  const down=e=>{
+    if(e && e.cancelable) e.preventDefault();
+    keys[key]=true;
+    el.classList.add('down');
+    if(isJump) jumpPressed=true;
+  };
+
+  const up=e=>{
+    if(e && e.cancelable) e.preventDefault();
+    keys[key]=false;
+    el.classList.remove('down');
+  };
+
+  // Pointer Events (modern browsers)
+  el.addEventListener('pointerdown',down,{passive:false});
+  el.addEventListener('pointerup',up,{passive:false});
+  el.addEventListener('pointercancel',up,{passive:false});
+  el.addEventListener('pointerleave',up,{passive:false});
+
+  // Explicit touch fallback for iPad/Safari/file preview environments.
+  el.addEventListener('touchstart',down,{passive:false});
+  el.addEventListener('touchend',up,{passive:false});
+  el.addEventListener('touchcancel',up,{passive:false});
+
+  // Mouse fallback.
+  el.addEventListener('mousedown',down);
+  el.addEventListener('mouseup',up);
+  el.addEventListener('mouseleave',up);
+}
+bindButton('left','left');
+bindButton('right','right');
+bindButton('jump','jump',true);
+
+window.addEventListener('keydown',e=>{
+  if(e.code==='ArrowLeft') keys.left=true;
+  if(e.code==='ArrowRight') keys.right=true;
+  if(e.code==='ArrowUp'||e.code==='Space'){
+    if(!keys.jump) jumpPressed=true;
+    keys.jump=true;
+    e.preventDefault();
+  }
+});
+window.addEventListener('keyup',e=>{
+  if(e.code==='ArrowLeft') keys.left=false;
+  if(e.code==='ArrowRight') keys.right=false;
+  if(e.code==='ArrowUp'||e.code==='Space') keys.jump=false;
+});
+
+let startingGuard=false;
+function startAdventure(){
+  if(startingGuard) return;
+  startingGuard=true;
+  setTimeout(()=>startingGuard=false,350);
+  resetGame();
+  overlay.style.display='none';
+  running=true;
+  last=performance.now();
+  // Give a tiny visible nudge so it's obvious the game has started.
+  player.vx=35;
+  showMessage('开始！用左右按钮移动，用“跳！”跳跃。',3);
+}
+startBtn.addEventListener('click', startAdventure);
+startBtn.addEventListener('touchend', (e)=>{
+  e.preventDefault();
+  startAdventure();
+}, {passive:false});
+
+function dieOrShrink(){
+  if(player.inv>0) return;
+  if(player.big){
+    player.big=false;
+    player.w=66; player.h=58;
+    player.y-=8;
+    player.inv=2.0;
+    sizeText.textContent='🐹 小水豚';
+    showMessage('哎呀！变回小水豚了！',2);
+    shake=.25;
+  }else{
+    player.x=player.checkpointX;
+    player.y=GROUND_Y-58;
+    player.vx=0; player.vy=0;
+    player.inv=2.0;
+    showMessage('回到最近的安全点，再来一次！',2);
+    shake=.35;
+  }
+}
+
+function grow(){
+  if(player.big) return;
+  player.big=true;
+  player.h=82; player.w=78;
+  player.y-=24;
+  sizeText.textContent='🐹 大水豚';
+  showMessage('吃到蘑菇！胖水豚变大啦！',2.4);
+}
+
+function update(dt){
+  if(!running || won) return;
+
+  if(messageTimer>0){
+    messageTimer-=dt;
+    if(messageTimer<=0) tip.textContent='继续向右，公主在城堡里！';
+  }
+
+  if(player.inv>0) player.inv-=dt;
+  if(shake>0) shake-=dt;
+
+  const accel=1800;
+  const maxSpeed=315;
+  if(keys.left){player.vx-=accel*dt;player.facing=-1}
+  if(keys.right){player.vx+=accel*dt;player.facing=1}
+  if(!keys.left&&!keys.right) player.vx*=Math.pow(.0009,dt);
+  player.vx=clamp(player.vx,-maxSpeed,maxSpeed);
+
+  if(jumpPressed && player.onGround){
+    player.vy=-690;
+    player.onGround=false;
+  }
+  jumpPressed=false;
+
+  player.vy+=GRAVITY*dt;
+  player.vy=Math.min(player.vy,1050);
+
+  // X movement
+  player.x+=player.vx*dt;
+  player.x=clamp(player.x,0,WORLD_W-player.w);
+
+  // Y movement + platform collision
+  const oldY=player.y;
+  player.y+=player.vy*dt;
+  player.onGround=false;
+  for(const p of platforms){
+    if(player.x+player.w>p.x && player.x<p.x+p.w){
+      const oldBottom=oldY+player.h;
+      const newBottom=player.y+player.h;
+      if(player.vy>=0 && oldBottom<=p.y+5 && newBottom>=p.y){
+        player.y=p.y-player.h;
+        player.vy=0;
+        player.onGround=true;
+      }
+    }
+  }
+  if(player.y>H+180){
+    dieOrShrink();
+    player.y=GROUND_Y-player.h;
+  }
+
+  // Coins
+  for(const c of coins){
+    if(c.taken) continue;
+    const box={x:c.x-c.r,y:c.y-c.r,w:c.r*2,h:c.r*2};
+    if(rects(player,box)){
+      c.taken=true;
+      player.coins++;
+      coinText.textContent=`🪙 ${player.coins} / 20`;
+      if(player.coins===5) showMessage('已经找到 5 枚金币！',1.5);
+      if(player.coins===20) showMessage('20 枚金币收集完成！',2.2);
+    }
+  }
+
+  // Mushrooms
+  for(const m of mushrooms){
+    if(!m.taken && rects(player,m)){
+      m.taken=true;
+      grow();
+    }
+  }
+
+  // Checkpoints
+  for(const cp of checkpoints){
+    if(!cp.active && player.x>cp.x){
+      cp.active=true;
+      player.checkpointX=cp.x+30;
+      showMessage('✅ 到达检查点！',1.8);
+    }
+  }
+
+  // Turtles
+  for(const t of turtles){
+    if(!t.alive) continue;
+    if(t.state==='walk'){
+      t.x+=t.vx*dt;
+      // Soft patrol around starting area using nearby bounds
+      const range=170;
+      const starts=[1180,1830,2530,3260,4100];
+      const s=starts[turtles.indexOf(t)];
+      if(t.x<s-range){t.x=s-range;t.vx=Math.abs(t.vx)}
+      if(t.x>s+range){t.x=s+range;t.vx=-Math.abs(t.vx)}
+    }else if(t.state==='shellMove'){
+      t.x+=t.vx*dt;
+      if(t.x<0||t.x>WORLD_W){t.alive=false;continue}
+      for(const other of turtles){
+        if(other!==t && other.alive && other.state==='walk' && rects(t,other)){
+          other.alive=false;
+          player.turtles++;
+          turtleText.textContent=`🐢 ${player.turtles}`;
+        }
+      }
+    }
+
+    if(rects(player,t)){
+      const playerBottom=player.y+player.h;
+      const falling=player.vy>100;
+      if(falling && playerBottom < t.y+t.h*.7){
+        if(t.state==='walk'){
+          t.state='shell';
+          t.vx=0;
+          t.h=28; t.y=GROUND_Y-28;
+          player.vy=-430;
+          player.turtles++;
+          turtleText.textContent=`🐢 ${player.turtles}`;
+          showMessage('踩到乌龟！它缩进壳里了！',1.8);
+        }else if(t.state==='shell'){
+          t.state='shellMove';
+          t.vx=player.facing*520;
+          player.vy=-350;
+          showMessage('龟壳飞出去啦！',1.5);
+        }
+      }else if(t.state==='shell'){
+        t.state='shellMove';
+        t.vx=(centerX(player)<centerX(t)?1:-1)*520;
+        player.x += (centerX(player)<centerX(t)?-10:10);
+        showMessage('踢！龟壳冲出去啦！',1.5);
+      }else{
+        dieOrShrink();
+      }
+    }
+  }
+
+  // Cannons & bullets
+  for(const c of cannons){
+    c.t-=dt;
+    if(c.t<=0){
+      c.t=c.rate;
+      bullets.push({
+        x:c.dir>0?c.x+c.w:c.x-26,
+        y:c.y+20,w:30,h:30,
+        vx:c.dir*360
+      });
+    }
+  }
+  for(const b of bullets){
+    b.x+=b.vx*dt;
+    if(rects(player,b)) dieOrShrink();
+  }
+  bullets=bullets.filter(b=>b.x>-100&&b.x<WORLD_W+100);
+
+  // Win
+  if(player.x>princess.x-85 && Math.abs(player.y+player.h-princess.y-princess.h)<140){
+    won=true;
+    running=false;
+    setTimeout(showWin, 350);
+  }
+
+  cameraX=clamp(player.x-W*.36,0,WORLD_W-W);
+}
+
+function drawBrick(x,y,w,h,color1,color2){
+  ctx.fillStyle=color1;
+  ctx.fillRect(x,y,w,h);
+  ctx.strokeStyle=color2;
+  ctx.lineWidth=3;
+  ctx.strokeRect(x,y,w,h);
+  const bw=42,bh=28;
+  for(let yy=y;yy<y+h;yy+=bh){
+    const off=((Math.floor((yy-y)/bh)%2)*bw/2);
+    for(let xx=x-off;xx<x+w;xx+=bw){
+      ctx.strokeRect(xx,yy,bw,bh);
+      ctx.beginPath();
+      ctx.arc(xx+bw/2,yy+5,5,0,Math.PI*2);
+      ctx.fillStyle='rgba(255,255,255,.18)';
+      ctx.fill();
+    }
+  }
+}
+
+function drawCapybara(p){
+  if(p.inv>0 && Math.floor(p.inv*10)%2===0) return;
+  ctx.save();
+  ctx.translate(p.x-cameraX+p.w/2,p.y+p.h/2);
+  if(p.facing<0) ctx.scale(-1,1);
+
+  const scale=p.big?1.08:.9;
+  ctx.scale(scale,scale);
+
+  // body
+  ctx.fillStyle='#a86f42';
+  ctx.beginPath();
+  ctx.ellipse(0,6,34,25,0,0,Math.PI*2);
+  ctx.fill();
+  // head
+  ctx.fillStyle='#b77b4b';
+  ctx.beginPath();
+  ctx.ellipse(25,-7,25,23,0,0,Math.PI*2);
+  ctx.fill();
+  // ears
+  ctx.fillStyle='#8d5b37';
+  ctx.beginPath();ctx.arc(16,-27,7,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(34,-24,6,0,Math.PI*2);ctx.fill();
+  // muzzle
+  ctx.fillStyle='#c99161';
+  ctx.beginPath();ctx.ellipse(40,2,12,9,0,0,Math.PI*2);ctx.fill();
+  // eye
+  ctx.fillStyle='#1e1b18';
+  ctx.beginPath();ctx.arc(34,-10,3.5,0,Math.PI*2);ctx.fill();
+  // nose
+  ctx.fillStyle='#33251e';
+  ctx.beginPath();ctx.arc(49,-1,3.5,0,Math.PI*2);ctx.fill();
+  // legs
+  ctx.fillStyle='#8d5b37';
+  ctx.fillRect(-20,22,10,14);ctx.fillRect(12,22,10,14);
+  // tiny scarf
+  ctx.fillStyle='#f4c449';
+  ctx.fillRect(1,-16,7,25);
+  ctx.restore();
+}
+
+function drawTurtle(t){
+  const x=t.x-cameraX, y=t.y;
+  if(!t.alive) return;
+  ctx.save();
+  ctx.translate(x+t.w/2,y+t.h/2);
+  if(t.state==='walk'){
+    ctx.fillStyle='#60a94f';
+    ctx.beginPath();ctx.ellipse(0,2,22,18,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#4a7d3e';
+    ctx.beginPath();ctx.arc(0,1,14,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#87c565';
+    ctx.beginPath();ctx.arc(17,-5,8,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#1b2c1c';
+    ctx.beginPath();ctx.arc(20,-7,2,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#6a8d50';
+    ctx.fillRect(-17,15,8,7);ctx.fillRect(8,15,8,7);
+  }else{
+    ctx.fillStyle='#4f8c45';
+    ctx.beginPath();ctx.ellipse(0,4,22,13,0,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#2e5d2a';ctx.lineWidth=4;
+    ctx.beginPath();ctx.arc(0,4,12,0,Math.PI*2);ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+
+  const sx=(shake>0?(Math.random()-.5)*10:0);
+  ctx.save();
+  ctx.translate(sx,0);
+
+  // sky
+  const grad=ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,'#86d7ff');
+  grad.addColorStop(1,'#eafcff');
+  ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);
+
+  // Clouds
+  for(let i=0;i<12;i++){
+    const wx=i*520+160;
+    const x=wx-cameraX*.25;
+    const y=90+(i%3)*58;
+    ctx.fillStyle='rgba(255,255,255,.85)';
+    ctx.beginPath();
+    ctx.arc(x,y,34,0,Math.PI*2);
+    ctx.arc(x+35,y-12,27,0,Math.PI*2);
+    ctx.arc(x+68,y,32,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  // distant brick hills
+  for(let i=0;i<10;i++){
+    const x=i*620-cameraX*.45;
+    const h=80+(i%3)*35;
+    drawBrick(x,GROUND_Y-h,350,h,'#7fca6e','#5b9b50');
+  }
+
+  // platforms
+  for(const p of platforms){
+    const x=p.x-cameraX;
+    if(x>W+100||x+p.w<-100) continue;
+    drawBrick(x,p.y,p.w,p.h,'#c98a57','#9e673f');
+    if(p.y===GROUND_Y){
+      ctx.fillStyle='#76bf52';
+      ctx.fillRect(x,p.y,p.w,15);
+    }
+  }
+
+  // checkpoint flags
+  for(const cp of checkpoints){
+    const x=cp.x-cameraX;
+    ctx.fillStyle='#596b7a';ctx.fillRect(x,GROUND_Y-95,6,95);
+    ctx.fillStyle=cp.active?'#ffd450':'#ffffff';
+    ctx.beginPath();ctx.moveTo(x+6,GROUND_Y-92);ctx.lineTo(x+50,GROUND_Y-76);ctx.lineTo(x+6,GROUND_Y-60);ctx.closePath();ctx.fill();
+  }
+
+  // mushrooms
+  for(const m of mushrooms){
+    if(m.taken) continue;
+    const x=m.x-cameraX;
+    ctx.fillStyle='#f05c52';
+    ctx.beginPath();ctx.arc(x+18,m.y+12,18,Math.PI,0);ctx.lineTo(x+36,m.y+18);ctx.lineTo(x,m.y+18);ctx.closePath();ctx.fill();
+    ctx.fillStyle='#fff';
+    ctx.beginPath();ctx.arc(x+10,m.y+7,4,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(x+26,m.y+8,4,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#f0d6a4';ctx.fillRect(x+12,m.y+16,12,18);
+  }
+
+  // coins
+  for(const c of coins){
+    if(c.taken) continue;
+    const x=c.x-cameraX;
+    const y=c.y+Math.sin(performance.now()/260+c.bob)*5;
+    ctx.fillStyle='#ffd43b';
+    ctx.beginPath();ctx.ellipse(x,y,10,15,0,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#c99000';ctx.lineWidth=3;ctx.stroke();
+    ctx.fillStyle='#fff1a8';ctx.fillRect(x-2,y-9,4,18);
+  }
+
+  // cannons
+  for(const c of cannons){
+    const x=c.x-cameraX;
+    ctx.fillStyle='#2b333a';
+    ctx.fillRect(x,c.y+24,c.w,c.h-24);
+    ctx.fillStyle='#14191d';
+    ctx.fillRect(x+(c.dir<0?-18:14),c.y,62,38);
+    ctx.fillStyle='#4f5b64';
+    ctx.fillRect(x+8,c.y+50,42,8);
+  }
+
+  // bullets
+  for(const b of bullets){
+    const x=b.x-cameraX;
+    ctx.fillStyle='#262a2e';
+    ctx.beginPath();ctx.arc(x+b.w/2,b.y+b.h/2,15,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#f4f4f4';
+    ctx.beginPath();ctx.arc(x+20,b.y+10,3.5,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#ffca4d';
+    ctx.beginPath();ctx.moveTo(x-(b.vx>0?8:-38),b.y+10);ctx.lineTo(x-(b.vx>0?18:-48),b.y+15);ctx.lineTo(x-(b.vx>0?8:-38),b.y+20);ctx.fill();
+  }
+
+  turtles.forEach(drawTurtle);
+
+  // castle
+  let cx=castle.x-cameraX;
+  drawBrick(cx,castle.y,castle.w,castle.h,'#d5b0df','#9b7ca6');
+  drawBrick(cx+55,castle.y-95,75,95,'#d5b0df','#9b7ca6');
+  drawBrick(cx+210,castle.y-120,75,120,'#d5b0df','#9b7ca6');
+  ctx.fillStyle='#65476e';ctx.fillRect(cx+130,GROUND_Y-120,72,120);
+  ctx.fillStyle='#ffd75b';
+  ctx.beginPath();ctx.moveTo(cx+92,castle.y-110);ctx.lineTo(cx+92,castle.y-155);ctx.lineTo(cx+150,castle.y-135);ctx.lineTo(cx+92,castle.y-115);ctx.fill();
+
+  // princess
+  const px=princess.x-cameraX;
+  ctx.fillStyle='#f7c8a9';ctx.beginPath();ctx.arc(px+24,princess.y+16,13,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#f3a4ca';ctx.beginPath();ctx.moveTo(px+24,princess.y+28);ctx.lineTo(px+2,princess.y+78);ctx.lineTo(px+46,princess.y+78);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#f4cf48';
+  ctx.beginPath();ctx.moveTo(px+10,princess.y+3);ctx.lineTo(px+17,princess.y-10);ctx.lineTo(px+25,princess.y+1);ctx.lineTo(px+34,princess.y-11);ctx.lineTo(px+40,princess.y+4);ctx.closePath();ctx.fill();
+
+  drawCapybara(player);
+
+  ctx.restore();
+}
+
+function showWin(){
+  const collected=player.coins;
+  card.innerHTML=`
+    <h1>🎉 通关成功！</h1>
+    <p><b>胖胖水豚救出公主啦！</b></p>
+    <p>🪙 金币：${collected} / 20<br>🐢 踩到 / 撞到乌龟：${player.turtles}</p>
+    <p>${collected>=20?'🌟 太厉害了，20 枚金币全部找到！':'还藏着一些金币，下次可以再找找看。'}</p>
+    <button id="againBtn">再玩一次</button>
+    <p class="small">Summer 还可以继续给下一版增加新机关。</p>`;
+  const again=card.querySelector('#againBtn');
+  again.style.cssText='margin-top:12px;padding:14px 24px;border:none;border-radius:18px;background:#ffd45b;color:#573d00;font-weight:900;font-size:20px;box-shadow:0 5px 0 #d2a735';
+  again.onclick=()=>{
+    overlay.style.display='none';
+    resetGame();
+    running=true;
+    last=performance.now();
+    player.vx=35;
+    showMessage('再来一次！',2);
+  };
+  overlay.style.display='flex';
+}
+
+function loop(now){
+  if(!last) last=now;
+  const dt=Math.min(.032,(now-last)/1000 || .016);
+  last=now;
+  if(running) update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// Keep the render loop alive from page load. This is more reliable on iPad/Safari.
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
